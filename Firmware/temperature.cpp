@@ -80,10 +80,18 @@ float current_temperature_bed = 0.0;
   float _Kp, _Ki, _Kd;
   int pid_cycle, pid_number_of_cycles;
   bool pid_tuning_finished = false;
+
   #ifdef PID_ADD_EXTRUSION_RATE
     float Kc=DEFAULT_Kc;
   #endif
 #endif //PIDTEMP
+
+#ifdef PIDTEMPBED
+  float bedKp=DEFAULT_bedKp;
+  float bedKi=(DEFAULT_bedKi*PID_dT);
+  float bedKd=(DEFAULT_bedKd/PID_dT);
+#endif //PIDTEMPBED
+
   
 #ifdef FAN_SOFT_PWM
   unsigned char fanSpeedSoftPwm;
@@ -225,7 +233,7 @@ static void temp_runaway_stop(bool isPreheat, bool isBed);
   float Ku, Tu;
   float max = 0, min = 10000;
   uint8_t safety_check_cycles = 0;
-  const uint8_t safety_check_cycles_count = (extruder < 0) ? 45 : 10; //10 cycles / 20s delay for extruder and 45 cycles / 90s for heatbed
+  const uint8_t safety_check_cycles_count = (extruder < 0) ? 90 : 10; //10 cycles / 20s delay for extruder and 45 cycles / 90s for heatbed
   float temp_ambient;
 
 #if (defined(EXTRUDER_0_AUTO_FAN_PIN) && EXTRUDER_0_AUTO_FAN_PIN > -1) || \
@@ -1168,8 +1176,7 @@ void temp_runaway_check(int _heater_id, float _target_temperature, float _curren
 	static int __preheat_errors[2] = { 0,0};
 		
 
-	if (millis() - temp_runaway_timer[_heater_id] > 2000)
-	{
+
 
 #ifdef 	TEMP_RUNAWAY_BED_TIMEOUT
           if (_isbed)
@@ -1185,6 +1192,9 @@ void temp_runaway_check(int _heater_id, float _target_temperature, float _curren
                __timeout = TEMP_RUNAWAY_EXTRUDER_TIMEOUT;
           }
 #endif
+
+	if (millis() - temp_runaway_timer[_heater_id] > 2000)
+	{
 
 		temp_runaway_timer[_heater_id] = millis();
 		if (_output == 0)
@@ -1209,8 +1219,9 @@ void temp_runaway_check(int _heater_id, float _target_temperature, float _curren
 			}
 		}
 
-		if ((_current_temperature < _target_temperature)  && (temp_runaway_status[_heater_id] == TempRunaway_PREHEAT))
+		if (temp_runaway_status[_heater_id] == TempRunaway_PREHEAT)
 		{
+      if (_current_temperature < ((_isbed) ? (0.8 * _target_temperature) : 150)) //check only area someting something
 			__preheat_counter[_heater_id]++;
 			if (__preheat_counter[_heater_id] > ((_isbed) ? 16 : 8)) // periodicaly check if current temperature changes
 			{
@@ -1241,6 +1252,7 @@ void temp_runaway_check(int _heater_id, float _target_temperature, float _curren
 				__preheat_counter[_heater_id] = 0;
 			}
 		}
+  }
 
 		if (_current_temperature >= _target_temperature  && temp_runaway_status[_heater_id] == TempRunaway_PREHEAT)
 		{
@@ -1248,7 +1260,7 @@ void temp_runaway_check(int _heater_id, float _target_temperature, float _curren
 			temp_runaway_check_active = false;
 		}
 
-		if (_output > 0)
+		if (!temp_runaway_check_active && _output > 0)
 		{
 			temp_runaway_check_active = true;
 		}
@@ -1257,7 +1269,7 @@ void temp_runaway_check(int _heater_id, float _target_temperature, float _curren
 		if (temp_runaway_check_active)
 		{			
 			//	we are in range
-			if ((_current_temperature > (_target_temperature - __hysteresis)) && (_current_temperature < (_target_temperature + __hysteresis)))
+			if (_target_temperature - __hysteresis < _current_temperature && _current_temperature < _target_temperature + __hysteresis)
 			{
 				temp_runaway_check_active = false;
 				temp_runaway_error_counter[_heater_id] = 0;
@@ -1278,7 +1290,7 @@ void temp_runaway_check(int _heater_id, float _target_temperature, float _curren
 		}
 
 	}
-}
+
 
 void temp_runaway_stop(bool isPreheat, bool isBed)
 {
