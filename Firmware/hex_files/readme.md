@@ -2,7 +2,9 @@
 
 ### TL;DR: 
 
-This firmware is completely stock except for addition of the 7x7 mesh bed leveling and changes to temperature files to fix the heatbed 'preheat error' bug that arose in 3.5.1.  Still requires g-code changes for 7x7 mesh bed leveling, recommend running a PID tune on the heatbed afterwards as well.  There is a version for MK3, MK2.5 (RAMBo 1.0 and 1.3 please use the right one for your PCB).  MK2S is not applicable. All sources linked below.
+This firmware is completely stock except for addition of the 7x7 mesh bed leveling and changes to temperature files to fix the heatbed 'preheat error' bug that arose in 3.5.1.  Still requires g-code changes for 7x7 mesh bed leveling, recommend running a PID tune on the heatbed afterwards as well.  
+
+There is a version for MK3, MK2.5 (RAMBo 1.0 and 1.3 please use the right one for your PCB).  MK2S is not applicable. All sources linked below.
 
 ### Long version:  
 
