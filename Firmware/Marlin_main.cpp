@@ -78,7 +78,6 @@
 #include <avr/pgmspace.h>
 
 #include "Dcodes.h"
-#include "AutoDeplete.h"
 
 
 #ifdef SWSPI
@@ -130,7 +129,6 @@
 #include "sound.h"
 
 #include "cmdqueue.h"
-#include "io_atmega2560.h"
 
 // Macros for bit masks
 #define BIT(b) (1<<(b))
@@ -643,8 +641,6 @@ void failstats_reset_print()
 	eeprom_update_byte((uint8_t *)EEPROM_CRASH_COUNT_Y, 0);
 	eeprom_update_byte((uint8_t *)EEPROM_FERROR_COUNT, 0);
 	eeprom_update_byte((uint8_t *)EEPROM_POWER_COUNT, 0);
-	eeprom_update_byte((uint8_t *)EEPROM_MMU_FAIL, 0);
-	eeprom_update_byte((uint8_t *)EEPROM_MMU_LOAD_FAIL, 0);
 }
 
 
@@ -691,12 +687,6 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 			eeprom_update_word((uint16_t *)EEPROM_FERROR_COUNT_TOT, 0);
 			eeprom_update_word((uint16_t *)EEPROM_POWER_COUNT_TOT, 0);
 
-			eeprom_update_word((uint16_t *)EEPROM_MMU_FAIL_TOT, 0);
-			eeprom_update_word((uint16_t *)EEPROM_MMU_LOAD_FAIL_TOT, 0);
-			eeprom_update_byte((uint8_t *)EEPROM_MMU_FAIL, 0);
-			eeprom_update_byte((uint8_t *)EEPROM_MMU_LOAD_FAIL, 0);
-
-
 			lcd_menu_statistics();
             
 			break;
@@ -722,11 +712,6 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
             eeprom_update_word((uint16_t *)EEPROM_CRASH_COUNT_Y_TOT, 0);
             eeprom_update_word((uint16_t *)EEPROM_FERROR_COUNT_TOT, 0);
             eeprom_update_word((uint16_t *)EEPROM_POWER_COUNT_TOT, 0);
-
-			eeprom_update_word((uint16_t *)EEPROM_MMU_FAIL_TOT, 0);
-			eeprom_update_word((uint16_t *)EEPROM_MMU_LOAD_FAIL_TOT, 0);
-			eeprom_update_byte((uint8_t *)EEPROM_MMU_FAIL, 0);
-			eeprom_update_byte((uint8_t *)EEPROM_MMU_LOAD_FAIL, 0);
 
 #ifdef FILAMENT_SENSOR
 			fsensor_enable();
@@ -1402,12 +1387,6 @@ void setup()
 	if (eeprom_read_word((uint16_t*)EEPROM_CRASH_COUNT_X_TOT) == 0xffff) eeprom_write_word((uint16_t*)EEPROM_CRASH_COUNT_X_TOT, 0);
 	if (eeprom_read_word((uint16_t*)EEPROM_CRASH_COUNT_Y_TOT) == 0xffff) eeprom_write_word((uint16_t*)EEPROM_CRASH_COUNT_Y_TOT, 0);
 	if (eeprom_read_word((uint16_t*)EEPROM_FERROR_COUNT_TOT) == 0xffff) eeprom_write_word((uint16_t*)EEPROM_FERROR_COUNT_TOT, 0);
-
-	if (eeprom_read_word((uint16_t*)EEPROM_MMU_FAIL_TOT) == 0xffff) eeprom_update_word((uint16_t *)EEPROM_MMU_FAIL_TOT, 0);
-	if (eeprom_read_word((uint16_t*)EEPROM_MMU_LOAD_FAIL_TOT) == 0xffff) eeprom_update_word((uint16_t *)EEPROM_MMU_LOAD_FAIL_TOT, 0);
-	if (eeprom_read_byte((uint8_t*)EEPROM_MMU_FAIL) == 0xff) eeprom_update_byte((uint8_t *)EEPROM_MMU_FAIL, 0);
-	if (eeprom_read_byte((uint8_t*)EEPROM_MMU_LOAD_FAIL) == 0xff) eeprom_update_byte((uint8_t *)EEPROM_MMU_LOAD_FAIL, 0);
-
 #ifdef SNMM
 	if (eeprom_read_dword((uint32_t*)EEPROM_BOWDEN_LENGTH) == 0x0ffffffff) { //bowden length used for SNMM
 	  int _z = BOWDEN_LENGTH;
@@ -4247,8 +4226,8 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 			}
 			current_position[Z_AXIS] = 5;
 			plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], 3000 / 60, active_extruder);
-			current_position[X_AXIS] = pgm_read_float(bed_ref_points);
-			current_position[Y_AXIS] = pgm_read_float(bed_ref_points + 1);
+			current_position[X_AXIS] = BED_X0;
+			current_position[Y_AXIS] = BED_Y0;
 			plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], 3000 / 60, active_extruder);
 			st_synchronize();
 			find_bed_induction_sensor_point_z(-1.f);
@@ -4366,6 +4345,13 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 			break;
 		} 
 		
+    uint8_t nMeasPoints = MESH_MEAS_NUM_X_POINTS;
+ 		if (code_seen('N')) {
+ 			nMeasPoints = code_value_uint8();
+ 			if (nMeasPoints != 7) {
+ 				nMeasPoints = 3;
+ 			}
+ 		}
 		
 		bool temp_comp_start = true;
 #ifdef PINDA_THERMISTOR
@@ -4394,7 +4380,7 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 		unsigned int custom_message_type_old = custom_message_type;
 		unsigned int custom_message_state_old = custom_message_state;
 		custom_message_type = CUSTOM_MSG_TYPE_MESHBL;
-		custom_message_state = (MESH_MEAS_NUM_X_POINTS * MESH_MEAS_NUM_Y_POINTS) + 10;
+		custom_message_state = (nMeasPoints * nMeasPoints) + 10;
 		lcd_update(1);
 
 		mbl.reset(); //reset mesh bed leveling
@@ -4408,8 +4394,8 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 		current_position[Z_AXIS] = MESH_HOME_Z_SEARCH;
 		plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], homing_feedrate[Z_AXIS] / 60, active_extruder);
 		// The move to the first calibration point.
-		current_position[X_AXIS] = pgm_read_float(bed_ref_points);
-		current_position[Y_AXIS] = pgm_read_float(bed_ref_points + 1);
+		current_position[X_AXIS] = BED_X0;
+		current_position[Y_AXIS] = BED_Y0;
 
 		#ifdef SUPPORT_VERBOSITY
 		if (verbosity_level >= 1)
@@ -4423,14 +4409,14 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 		// Wait until the move is finished.
 		st_synchronize();
 
-		int mesh_point = 0; //index number of calibration point
+		uint8_t mesh_point = 0; //index number of calibration point
 
-		int ix = 0;
-		int iy = 0;
+		uint8_t ix = 0;
+		uint8_t iy = 0;
 
-		int XY_AXIS_FEEDRATE = homing_feedrate[X_AXIS] / 20;
+		int XY_AXIS_FEEDRATE = homing_feedrate[X_AXIS] / 30;
 		int Z_LIFT_FEEDRATE = homing_feedrate[Z_AXIS] / 40;
-		bool has_z = is_bed_z_jitter_data_valid(); //checks if we have data from Z calibration (offsets of the Z heiths of the 8 calibration points from the first point)
+		bool has_z = (nMeasPoints == 3) && is_bed_z_jitter_data_valid(); //checks if we have data from Z calibration (offsets of the Z heiths of the 8 calibration points from the first point)
 		#ifdef SUPPORT_VERBOSITY
 		if (verbosity_level >= 1) {
 			has_z ? SERIAL_PROTOCOLPGM("Z jitter data from Z cal. valid.\n") : SERIAL_PROTOCOLPGM("Z jitter data from Z cal. not valid.\n");
@@ -4438,13 +4424,13 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 		#endif // SUPPORT_VERBOSITY
 		int l_feedmultiply = setup_for_endstop_move(false); //save feedrate and feedmultiply, sets feedmultiply to 100
 		const char *kill_message = NULL;
-		while (mesh_point != MESH_MEAS_NUM_X_POINTS * MESH_MEAS_NUM_Y_POINTS) {
+		while (mesh_point != nMeasPoints * nMeasPoints) {
 			// Get coords of a measuring point.
-			ix = mesh_point % MESH_MEAS_NUM_X_POINTS; // from 0 to MESH_NUM_X_POINTS - 1
-			iy = mesh_point / MESH_MEAS_NUM_X_POINTS;
-			if (iy & 1) ix = (MESH_MEAS_NUM_X_POINTS - 1) - ix; // Zig zag
+			ix = mesh_point % nMeasPoints; // from 0 to MESH_NUM_X_POINTS - 1
+			iy = mesh_point / nMeasPoints;
+			if (iy & 1) ix = (nMeasPoints - 1) - ix; // Zig zag
 			float z0 = 0.f;
-			if (has_z && mesh_point > 0) {
+			if (has_z && (mesh_point > 0)) {
 				uint16_t z_offset_u = eeprom_read_word((uint16_t*)(EEPROM_BED_CALIBRATION_Z_JITTER + 2 * (ix + iy * 3 - 1)));
 				z0 = mbl.z_values[0][0] + *reinterpret_cast<int16_t*>(&z_offset_u) * 0.01;
 				//#if 0
@@ -4467,8 +4453,8 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 			st_synchronize();
 
 			// Move to XY position of the sensor point.
-			current_position[X_AXIS] = pgm_read_float(bed_ref_points + 2 * mesh_point);
-			current_position[Y_AXIS] = pgm_read_float(bed_ref_points + 2 * mesh_point + 1);
+			current_position[X_AXIS] = BED_X(ix, nMeasPoints);
+			current_position[Y_AXIS] = BED_Y(iy, nMeasPoints);
 
 
 
@@ -4539,7 +4525,7 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 		#endif // SUPPORT_VERBOSITY
 		plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], Z_LIFT_FEEDRATE, active_extruder);
 		st_synchronize();
-		if (mesh_point != MESH_MEAS_NUM_X_POINTS * MESH_MEAS_NUM_Y_POINTS) {
+		if (mesh_point != nMeasPoints * nMeasPoints) {
                Sound_MakeSound(e_SOUND_TYPE_StandardAlert);
                bool bState;
                do   {                             // repeat until Z-leveling o.k.
@@ -4616,34 +4602,40 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 			else {
 				switch (i) {
 				case 0:
-					for (uint8_t row = 0; row < 3; ++row) {
-						mbl.z_values[row][1] += 0.5f * offset;
-						mbl.z_values[row][0] += offset;
+					for (uint8_t row = 0; row < nMeasPoints; ++row) {
+            for (uint8_t col = 0; col < nMeasPoints - 1; ++col) {
+              mbl.z_values[row][col] += offset * (nMeasPoints - 1 - col) / (nMeasPoints - 1);
+ 						}
 					}
 					break;
 				case 1:
-					for (uint8_t row = 0; row < 3; ++row) {
-						mbl.z_values[row][1] += 0.5f * offset;
-						mbl.z_values[row][2] += offset;
+					for (uint8_t row = 0; row < nMeasPoints; ++row) {
+            for (uint8_t col = 1; col < nMeasPoints; ++col) {
+              mbl.z_values[row][col] += offset * col / (nMeasPoints - 1);
+            }
 					}
 					break;
 				case 2:
-					for (uint8_t col = 0; col < 3; ++col) {
-						mbl.z_values[1][col] += 0.5f * offset;
-						mbl.z_values[0][col] += offset;
+					for (uint8_t col = 0; col < nMeasPoints; ++col) {
+						for (uint8_t row = 0; row < nMeasPoints; ++row) {
+						 mbl.z_values[row][col] += offset * (nMeasPoints - 1 - row) / (nMeasPoints - 1);
+            }
 					}
 					break;
 				case 3:
-					for (uint8_t col = 0; col < 3; ++col) {
-						mbl.z_values[1][col] += 0.5f * offset;
-						mbl.z_values[2][col] += offset;
+					for (uint8_t col = 0; col < nMeasPoints; ++col) {
+						for (uint8_t row = 1; row < nMeasPoints; ++row) {
+						  mbl.z_values[row][col] += offset * row / (nMeasPoints - 1);
+            }
 					}
 					break;
 				}
 			}
 		}
 //		SERIAL_ECHOLNPGM("Bed leveling correction finished");
-		mbl.upsample_3x3(); //bilinear interpolation from 3x3 to 7x7 points while using the same array z_values[iy][ix] for storing (just coppying measured data to new destination and interpolating between them)
+    if (nMeasPoints == 3) {
+		  mbl.upsample_3x3(); //bilinear interpolation from 3x3 to 7x7 points while using the same array z_values[iy][ix] for storing (just coppying measured data to new destination and interpolating between them)
+    }
 //		SERIAL_ECHOLNPGM("Upsample finished");
 		mbl.active = 1; //activate mesh bed leveling
 //		SERIAL_ECHOLNPGM("Mesh bed leveling activated");
@@ -6913,20 +6905,16 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
 		if (mmu_enabled)
 		{
 			tmp_extruder = choose_menu_P(_T(MSG_CHOOSE_FILAMENT), _T(MSG_FILAMENT));
-			if ((tmp_extruder == mmu_extruder) && mmu_fil_loaded) {
-				printf_P(PSTR("Duplicit T-code ignored.\n"));
-				return; //dont execute the same T-code twice in a row
-			}
 			st_synchronize();
 			mmu_command(MMU_CMD_T0 + tmp_extruder);
-			manage_response(true, true, MMU_TCODE_MOVE);
+			manage_response(true, true);
 		}
 	  }
 	  else if (*(strchr_pointer + index) == 'c') { //load to from bondtech gears to nozzle (nozzle should be preheated)
 	  	if (mmu_enabled) 
 		{
 			st_synchronize();
-			mmu_continue_loading();
+			mmu_command(MMU_CMD_C0);
 			mmu_extruder = tmp_extruder; //filament change is finished
 			mmu_load_to_nozzle();
 		}
@@ -6945,25 +6933,17 @@ if((eSoundMode==e_SOUND_MODE_LOUD)||(eSoundMode==e_SOUND_MODE_ONCE))
           }
           else {
               tmp_extruder = code_value();
-              if (mmu_enabled && lcd_autoDepleteEnabled())
-              {
-                  tmp_extruder = ad_getAlternative(tmp_extruder);
-              }
           }
           st_synchronize();
           snmm_filaments_used |= (1 << tmp_extruder); //for stop print
 
           if (mmu_enabled)
           {
-              if ((tmp_extruder == mmu_extruder) && mmu_fil_loaded) {
-                  printf_P(PSTR("Duplicit T-code ignored.\n"));
-                  return; //dont execute the same T-code twice in a row
-              }
               mmu_command(MMU_CMD_T0 + tmp_extruder);
 
-			  manage_response(true, true, MMU_TCODE_MOVE);
-			  mmu_continue_loading();
-			  mmu_extruder = tmp_extruder; //filament change is finished
+              manage_response(true, true);
+              mmu_command(MMU_CMD_C0);
+              mmu_extruder = tmp_extruder; //filament change is finished
 
               if (load_to_nozzle)// for single material usage with mmu
               {
